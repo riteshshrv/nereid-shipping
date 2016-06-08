@@ -38,7 +38,6 @@ class BaseTestCheckout(BaseTestCase):
         self.Category = POOL.get('product.category')
         self.Account = POOL.get('account.account')
         self.ProductTemplate = POOL.get('product.template')
-        self.UPSService = POOL.get('ups.service')
 
         self.templates.update({
             'checkout/signin.jinja': '{{form.errors|safe}}',
@@ -164,11 +163,6 @@ class BaseTestCheckout(BaseTestCase):
             ])],
         })
 
-        self.ups_service, = self.UPSService.create([{
-            'name': 'Next Day Air',
-            'code': '01',
-        }])
-
     def create_product(self, type='goods'):
         """
         Create product
@@ -201,7 +195,7 @@ class BaseTestCheckout(BaseTestCase):
         }
         if type == 'goods':
             self.uom_kg, = self.Uom.search([('symbol', '=', 'kg')])
-            values.update({
+            values['products'][0][1][0].update({
                 'weight': .5,
                 'weight_uom': self.uom_kg.id,
             })
@@ -255,7 +249,7 @@ class TestCheckoutDeliveryMethod(BaseTestCheckout):
             with app.test_client() as c:
                 c.post(
                     '/cart/add', data={
-                        'product': self.product1.id, 'quantity': 5
+                        'product': self.product.id, 'quantity': 5
                     }
                 )
                 rv = c.get('/checkout/delivery-method')
@@ -273,7 +267,7 @@ class TestCheckoutDeliveryMethod(BaseTestCheckout):
             with app.test_client() as c:
                 c.post(
                     '/cart/add', data={
-                        'product': self.product1.id, 'quantity': 5
+                        'product': self.product.id, 'quantity': 5
                     }
                 )
 

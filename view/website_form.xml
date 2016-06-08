@@ -1,0 +1,7 @@
+<data>
+    <xpath expr="/form/notebook/page[@id='checkout']" position="after">
+        <page string="Carriers" id="carriers">
+            <field name="carriers" colspan="4"/>
+        </page>
+    </xpath>
+</data>

@@ -5,6 +5,8 @@
     :copyright: (c) 2015 by Fulfil.IO Inc.
     :license: see LICENSE for details.
 """
+import json
+from decimal import Decimal
 from itsdangerous import URLSafeSerializer, BadSignature
 
 from trytond.pool import Pool, PoolMeta
@@ -29,6 +31,7 @@ class Checkout:
     def delivery_method(cls):
         '''
         Selection of delivery method (options)
+
         Based on the shipping address selected, the delivery options
         could be shown to the user. This may include choosing shipping speed
         and if there are multiple items, the option to choose items as they are
@@ -37,15 +40,17 @@ class Checkout:
         NereidCart = Pool().get('nereid.cart')
         Carrier = Pool().get('carrier')
         Sale = Pool().get('sale.sale')
-
-        signer = URLSafeSerializer(current_app.config['SECRET_KEY'])
+        CarrierService = Pool().get('carrier.service')
+        Currency = Pool().get('currency.currency')
 
         cart_sale = NereidCart.open_cart().sale
+
+        signer = URLSafeSerializer(current_app.config['SECRET_KEY'])
 
         if not cart_sale.shipment_address:
             return redirect(url_for('nereid.checkout.shipping_address'))
 
-        if not cart_sale.package_weight:
+        if not cart_sale.weight:
             # No weight, no shipping. Have fun !
             return redirect(url_for('nereid.checkout.payment_method'))
 
@@ -60,23 +65,32 @@ class Checkout:
             cart_sale.apply_shipping()
             return redirect(url_for('nereid.checkout.payment_method'))
 
+        if request.method == 'POST' and request.form.get('carrier_json'):
+            rate = json.loads(request.form.get('carrier_json'))
+            rate.update({
+                'carrier': Carrier(rate['carrier']),
+                'carrier_service': CarrierService(rate['carrier_service']),
+                'cost_currency': Currency(rate['cost_currency']),
+                'cost': Decimal("%s" % (rate['cost'], ))
+            })
+            cart_sale.apply_shipping_rate(rate)
+            return redirect(url_for('nereid.checkout.payment_method'))
+
         shipping_overweight = False
         delivery_rates = []
         with Transaction().set_context(sale=cart_sale.id):
             try:
-                delivery_rates = Carrier.get_rate_list()
+                delivery_rates = cart_sale.get_shipping_rates(
+                    request.nereid_website.carriers,
+                    silent=True
+                )
             except UserError, e:
                 # Possible Errors: Overweighted shipment, Invalid address
                 # TODO: Handle gracefully
                 flash(e.message)
                 return redirect(url_for('nereid.checkout.shipping_address'))
 
-        # Sign write_vals before feeding to template
-        signed_rates = []
-        for rate in delivery_rates:
-            signed_rates.append(rate[:4] + (signer.dumps(rate[4]),))
-
         return render_template(
-            'checkout/delivery_method.jinja', sale=cart_sale,
-            delivery_rates=signed_rates, shipping_overweight=shipping_overweight
+            'checkout/delivery_method.jinja', delivery_rates=delivery_rates,
+            sale=cart_sale, shipping_overweight=shipping_overweight
         )
